@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<meta charset="utf-8">
+<style>
+img {
+  border: 3px dashed;
+  display: none;
+}
+canvas {
+  border: 3px solid blue;
+  background: silver;
+}
+</style>
+<script>
+window.addEventListener("error", function(e) {
+  alert(e.error.message);
+});
+window.addEventListener("keyup", function(e) {
+  if (e.key === "Escape") require("electron").remote.app.quit();
+});
+var doWriteFile = function(buf, filename) {
+  var fs = require("fs");
+  var newfilename = filename.replace(/\./, "a.");
+  try {
+    fs.statSync(newfilename);
+    // NO, Duplicated!
+    newfilename = newfilename.replace(/\./, Date.now() + ".");
+  } catch(e) {
+    // YES, Unique!
+  }
+  try {
+    fs.writeFileSync(newfilename, buf);
+  } catch(e) {
+    alert(e);
+  }
+};
+var doCanvas = function(img) {
+  var canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  document.body.appendChild(canvas);
+  var ctx = canvas.getContext("2d");
+  ctx.globalAlpha = 254 / 256;
+  ctx.drawImage(img, 0, 0);
+  ctx.globalAlpha = 1;
+  canvas.toBlob(function(blob) {
+    var fr = new FileReader;
+    fr.addEventListener("load", function(e) {
+      var buf = Buffer.from(fr.result);
+      doWriteFile(buf, img.getAttribute("src"));
+    });
+    fr.readAsArrayBuffer(blob);
+  }, "image/png");
+};
+var main = function() {
+  var electron = require("electron");
+  var remote = electron.remote;
+  var argv = electron.remote.process.argv;
+  if (argv.length < 3) {
+    alert("Give me arguments!");
+    remote.app.quit();
+  }
+  var args = argv.slice(2);
+  var fs = require("fs");
+  args = args.filter(function(str) {
+    try {
+      var result = fs.statSync(str);
+      if (result.isFile()) {
+        return true;
+      }
+    } catch(e) {
+      return false;
+    }
+    return false;
+  });
+  if (!args.length) {
+    alert("arguments must be filename");
+    remote.app.quit();
+  }
+  document.title = args;
+  args.forEach(function(filename) {
+    var img = document.createElement("img");
+    img.src = filename;
+    img.addEventListener("load", function(e) {
+      doCanvas(img);
+    });
+    img.addEventListener("error", function(e) {
+      alert("<img> load error: " + filename);
+    });
+    document.body.appendChild(img);
+  });
+};
+if (document.readyState === "complete") main();
+else addEventListener("load", main);
+</script>
+<title>pngalpha</title>
+<p>progressing..
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,8 @@
+{
+  "name": "PNGAlpha",
+  "main": "index.js",
+  "version": "0.0.1",
+  "dependencies": {
+    "electron": "^1.6.2"
+  }
+}
