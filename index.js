@@ -2,8 +2,8 @@ var electron = require("electron");
 var window = null;
 electron.app.on("ready", function() {
   window = new electron.BrowserWindow({
-    width: 320,
-    height: 240
+    width: 640,
+    height: 480
   });
   window.on("close", function() {
     electron.app.quit();

@@ -1,25 +1,66 @@
 <!DOCTYPE html>
 <meta charset="utf-8">
 <style>
+body {
+  font-family: monospace;
+}
 img {
-  border: 3px dashed;
   display: none;
 }
 canvas {
-  border: 3px solid blue;
-  background: silver;
+  display: none;
 }
 </style>
 <script>
-window.addEventListener("error", function(e) {
-  alert(e.error.message);
-});
-window.addEventListener("keyup", function(e) {
-  if (e.key === "Escape") require("electron").remote.app.quit();
-});
-var doWriteFile = function(buf, filename) {
+"use strict";
+var A;
+// this app's global data
+A = {
+  electron: require("electron")
+};
+
+// read foo.png as <img src="foo.png">
+var readPNGFile = function(path) {
+  var img = document.createElement("img");
+  img.src = path;
+  document.body.appendChild(img);
+  return new Promise(function(onScs, onErr) {
+    img.addEventListener("load", function(e) {
+      onScs(img);
+    });
+    img.addEventListener("error", function(e) {
+      onErr("<img> error: " + path);
+    });
+  });
+};
+
+// add alpha=transparent99% to <img src="foo.png">
+var transPNG = function(img) {
+  var canvas = document.createElement("canvas");
+  canvas.width = img.width;
+  canvas.height = img.height;
+  var ctx = canvas.getContext("2d");
+  ctx.globalAlpha = 254 / 256;
+  ctx.drawImage(img, 0, 0);
+  return new Promise(function(onScs, onErr) {
+    canvas.toBlob(function(blob) {
+      var fr = new FileReader;
+      fr.addEventListener("load", function() {
+        var buf = Buffer.from(fr.result);
+        onScs([buf, img.getAttribute("src")]);
+      });
+      fr.addEventListener("error", function() {
+        onErr("FileReader() error: " + img.getAttribute("src"));
+      });
+      fr.readAsArrayBuffer(blob);
+    });
+  });
+};
+
+// write processed foo.png
+var writePNGFile = function(buf, filename) {
   var fs = require("fs");
-  var newfilename = filename.replace(/\./, "a.");
+  var newfilename = filename.replace(/\./, "-alpha.");
   try {
     fs.statSync(newfilename);
     // NO, Duplicated!
@@ -27,90 +68,71 @@ var doWriteFile = function(buf, filename) {
   } catch(e) {
     // YES, Unique!
   }
-  try {
-    fs.writeFileSync(newfilename, buf);
-  } catch(e) {
-    alert(e);
-  }
-};
-var doCanvas = function(img) {
-  var canvas = document.createElement("canvas");
-  canvas.width = img.width;
-  canvas.height = img.height;
-  document.body.appendChild(canvas);
-  var ctx = canvas.getContext("2d");
-  ctx.globalAlpha = 254 / 256;
-  ctx.drawImage(img, 0, 0);
-  ctx.globalAlpha = 1;
-  canvas.toBlob(function(blob) {
-    var fr = new FileReader;
-    fr.addEventListener("load", function(e) {
-      var buf = Buffer.from(fr.result);
-      doWriteFile(buf, img.getAttribute("src"));
-    });
-    fr.readAsArrayBuffer(blob);
-  }, "image/png");
-};
-var main = function() {
-  var electron = require("electron");
-  var remote = electron.remote;
-  var argv = electron.remote.process.argv;
-  if (argv.length < 3) {
-    alert("Give me arguments!");
-    remote.app.quit();
-  }
-  var args = argv.slice(2);
-  var fs = require("fs");
-  args = args.filter(function(str) {
+  return new Promise(function(onScs, onErr) {
     try {
-      var result = fs.statSync(str);
-      if (result.isFile()) {
-        return true;
-      }
+      fs.writeFileSync(newfilename, buf);
+      onScs();
     } catch(e) {
-      return false;
+      onErr(e.message);
     }
-    return false;
-  });
-  if (!args.length) {
-    alert("arguments must be filename");
-    remote.app.quit();
-  }
-  document.title = args;
-  args.forEach(function(filename) {
-    var img = document.createElement("img");
-    img.src = filename;
-    img.addEventListener("load", function(e) {
-      doCanvas(img);
-    });
-    img.addEventListener("error", function(e) {
-      alert("<img> load error: " + filename);
-    });
-    document.body.appendChild(img);
   });
 };
-if (document.readyState === "complete") main();
-else addEventListener("load", main);
+
+// this app's first process
+var main = function() {
+  var argv = A.electron.remote.process.argv;
+  var args = argv.filter(function(str) {
+    return /\.png$/i.test(str);
+  });
+  if (args.length === 0) {
+    alert("Give me arguments that must be *.png");
+    A.electron.remote.app.quit();
+  }
+  var finished = [];
+  args.forEach(function(arg, idx, args) {
+    // on finished main process
+    var onFinishedAll = function() {
+      if (finished.length < args.length) {
+        return "not finished yet";
+      }
+      if (finished.some(function(item) {
+        return item instanceof Error;
+      })) {
+        // some error has happened..
+        finished.forEach(function(item) {
+          var entry = document.createElement("li");
+          entry.textContent = item.message || item;
+          document.querySelector("#proclist").appendChild(entry);
+        });
+      } else {
+        // all succeeded!
+        A.electron.remote.app.quit();
+      }
+    };
+    // main process (PNG: read > trans > write)
+    readPNGFile(arg).then(function(img) {
+      return transPNG(img);
+    }).then(function([buf, filename]) {
+      return writePNGFile(buf, filename);
+    }).then(function() {
+      finished.push("[OK] " + arg);
+      onFinishedAll();
+    }).catch(function(errmsg) {
+      finished.push(Error("[NG] " + errmsg));
+      onFinishedAll();
+    });
+  });
+};
+addEventListener("load", main);
+
+// global event listeners
+window.addEventListener("error", function(e) {
+  alert(e.error.message);
+});
+window.addEventListener("keyup", function(e) {
+  if (e.key === "Escape") A.electron.remote.app.quit();
+});
 </script>
-<title>pngalpha</title>
-<p>progressing..
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+<ul id="proclist">
+  <li>processing..
+</ul>

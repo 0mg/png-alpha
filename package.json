@@ -1,7 +1,8 @@
 {
-  "name": "PNGAlpha",
+  "name": "PNG_Alpha-er",
   "main": "index.js",
   "version": "0.0.1",
+  "description": "Add alpha as transparent 99% to PNG files",
   "dependencies": {
     "electron": "^1.6.2"
   }
