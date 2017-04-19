@@ -19,6 +19,13 @@ A = {
   electron: require("electron")
 };
 
+// write string to stdout
+var puts = function(any) {
+  var console = require("electron").remote.getGlobal("console");
+  var str = String(any);
+  return console.log(str);
+};
+
 // read foo.png as <img src="foo.png">
 var readPNGFile = function(path) {
   var img = document.createElement("img");
@@ -71,7 +78,7 @@ var writePNGFile = function(buf, filename) {
   return new Promise(function(onScs, onErr) {
     try {
       fs.writeFileSync(newfilename, buf);
-      onScs();
+      onScs(newfilename);
     } catch(e) {
       onErr(e.message);
     }
@@ -85,8 +92,8 @@ var main = function() {
     return /\.png$/i.test(str);
   });
   if (args.length === 0) {
-    alert("Give me arguments that must be *.png");
-    A.electron.remote.app.quit();
+    puts("Give me arguments that must be *.png");
+    A.electron.remote.app.exit(1);
   }
   var finished = [];
   args.forEach(function(arg, idx, args) {
@@ -95,39 +102,33 @@ var main = function() {
       if (finished.length < args.length) {
         return "not finished yet";
       }
-      if (finished.some(function(item) {
-        return item instanceof Error;
-      })) {
-        // some error has happened..
-        finished.forEach(function(item) {
-          var entry = document.createElement("li");
-          entry.textContent = item.message || item;
-          document.querySelector("#proclist").appendChild(entry);
-        });
-      } else {
-        // all succeeded!
-        A.electron.remote.app.quit();
+      if (finished.some(item => item instanceof Error)) {
+        A.electron.remote.app.exit(1)
       }
+      A.electron.remote.app.exit(0);
     };
     // main process (PNG: read > trans > write)
     readPNGFile(arg).then(function(img) {
       return transPNG(img);
     }).then(function([buf, filename]) {
       return writePNGFile(buf, filename);
-    }).then(function() {
+    }).then(function(newfilename) {
+      puts("OK! created: " + newfilename);
       finished.push("[OK] " + arg);
       onFinishedAll();
     }).catch(function(errmsg) {
+      puts(errmsg);
       finished.push(Error("[NG] " + errmsg));
       onFinishedAll();
     });
   });
 };
-addEventListener("load", main);
+if (document.readyState === "complete") main();
+else addEventListener("load", main);
 
 // global event listeners
 window.addEventListener("error", function(e) {
-  alert(e.error.message);
+  puts(e.error.message);
 });
 window.addEventListener("keyup", function(e) {
   if (e.key === "Escape") A.electron.remote.app.quit();
